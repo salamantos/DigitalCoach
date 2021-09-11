@@ -18,7 +18,11 @@ class Thread(QThread):
         while True:
             ret, frame = cap.read()
             if ret:
-                rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #Delete after
+                ### cap.read() ----> some_func
+                ### newFrame = get_new_frame_from_neuron_goes_brrrrrrrrrrrrrrrr()
+                ### rgbImage = cv2.cvtColor(newFrame, cv2.COLOR_BGR2RGB)
+
                 h, w, ch = rgbImage.shape
                 bytesPerLine = ch * w
                 convertToQtFormat = QImage(rgbImage.data, w, h, bytesPerLine, QImage.Format_RGB888)
