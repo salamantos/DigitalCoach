@@ -8,112 +8,18 @@ import copy
 from PyQt5.QtCore import *
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import *
+import signal
+import os
+import time
 
-
-class Thread(QThread):
-    changePixmap = pyqtSignal(tuple)
-    changeText = pyqtSignal(list)
-
-    def __init__(self, cam_num, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.cam = cam_num
-        self.mpPose = mp.solutions.pose
-        self.pose = self.mpPose.Pose()
-        self.mpDraw = mp.solutions.drawing_utils
-
-    def get_new_frame_from_neuron(self, img):
-        """
-        This function founds pose landmarks, draws them on img and returns them
-
-        Ids from doc: https://google.github.io/mediapipe/solutions/pose.html
-
-        :return: found landmarks
-        """
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = self.pose.process(img_rgb)
-        landmarks = {}
-        if results.pose_landmarks:
-            self.mpDraw.draw_landmarks(
-                img, results.pose_landmarks, self.mpPose.POSE_CONNECTIONS
-            )
-            for mark_id, lm in enumerate(results.pose_landmarks.landmark):
-                h, w, c = img.shape
-                landmarks[mark_id] = lm
-                cx, cy = int(lm.x * w), int(lm.y * h)
-                cv2.circle(img, (cx, cy), 5, (255, 0, 0), cv2.FILLED)
-
-        return landmarks
-
-    def get_angle(self, landmark, joint_list):
-        angle_list = []
-        for joint in joint_list:
-            a = np.array([landmark[joint[0]].x,landmark[joint[0]].y]) # First coordinate
-            b = np.array([landmark[joint[1]].x,landmark[joint[1]].y]) # Second coordinate
-            c = np.array([landmark[joint[2]].x,landmark[joint[2]].y]) # Third coordinate
-
-            radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
-            angle = np.abs(radians*180.0/np.pi)
-            angle = angle - 180 if angle > 180.0 else angle
-
-            angle_list.append(angle)
-
-
-        return angle_list
-
-    def video_preapring(self, frame, width=640, height=480):
-        """
-        This function processes video and converting it to QtVideoFormat
-
-        Ids from doc: https://google.github.io/mediapipe/solutions/pose.html
-
-        :return: found landmarks
-        """
-        rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        h, w, ch = rgbImage.shape
-        bytesPerLine = ch * w
-        convertToQtFormat = QImage(
-            rgbImage.data, w, h, bytesPerLine, QImage.Format_RGB888
-        )
-        return convertToQtFormat.scaled(width, height, Qt.KeepAspectRatio)
-
-    def run(self):
-        cap = cv2.VideoCapture(self.cam)
-
-        while True:
-            ret, frame = cap.read()
-
-            if ret:
-                clearQtImage = self.video_preapring(copy.deepcopy(frame))
-                landmarks = self.get_new_frame_from_neuron(frame)
-                markedQtImage = self.video_preapring(frame)
-                imageTuple = (clearQtImage, markedQtImage)
-                self.changePixmap.emit(imageTuple)
-                if landmarks:
-                    angList = self.get_angle(landmarks, ([16,14,12], [14,12,24], [15,13,11], [13, 11, 23]))
-                    self.changeText.emit(angList)
-
-                # bright = (
-                #         int(frame[320, 240, 0]) +
-                #         int(frame[320, 240, 1]) +
-                #         int(frame[320, 240, 2])
-                # )
-                # print(frame[320, 240, 0], frame[320, 240, 1],
-                #       frame[320, 240, 2], bright)
-                #
-                # if bright > 400:
-                #     self.changeText.emit('Too bright')
-                # elif bright < 120:
-                #     self.changeText.emit('Too dark')
-                # else:
-                #     self.changeText.emit('Everything is Okay')
-
+from GUI.VideoWorker import VideoWorker
 
 
 class App(QWidget):
     def __init__(self, cam_id=0):
         super().__init__()
         self.cam_id = cam_id
+        self.landmarks = None
         self.initUI()
 
     @pyqtSlot(tuple)
@@ -126,6 +32,23 @@ class App(QWidget):
         elements = (self.rightHandElbow, self.rightHandShoulder, self.leftHandElbow, self.leftHandShoulder)
         for pos, el in enumerate(elements):
             el.setText(f'{elementList[pos]:.2f}')
+
+    @pyqtSlot(dict)
+    def getDict(self, point_dict):
+        self.landmarks = point_dict
+
+    @pyqtSlot(str, str)
+    def handExcersice(self, currentHand, isCorrect):
+        self.priorityHand.setText(currentHand)
+        self.isExcCorrect.setText(isCorrect)
+
+    @pyqtSlot(int)
+    def completeChange(self, amount):
+        print(amount)
+        self.completeNum.setText(f'{amount}')
+
+
+
 
     def create_text_instance(self, labelName: QLabel, labelComment: str):
         frame = QFrame(self)
@@ -154,6 +77,9 @@ class App(QWidget):
         hbox.addWidget(self.labelClear)
         hbox.addWidget(self.labelMarked)
 
+        button = QPushButton('Start squats')
+
+
         vbox = QVBoxLayout()
         frame = QFrame(self)
 
@@ -171,17 +97,27 @@ class App(QWidget):
         self.leftHandShoulder = QLabel(self)
         vbox.addWidget(self.create_text_instance(self.leftHandShoulder, 'Left hand shoulder:'))
 
+        self.priorityHand = QLabel(self)
+        vbox.addWidget(self.create_text_instance(self.priorityHand, 'Current detected active hand is:'))
+
+        self.isExcCorrect = QLabel(self)
+        vbox.addWidget(self.create_text_instance(self.isExcCorrect, 'State:'))
+
+        self.completeNum = QLabel(self)
+        vbox.addWidget(self.create_text_instance(self.completeNum, 'Completed - '))
 
         frame.setLayout(vbox)
         hbox.addWidget(frame)
         self.setLayout(hbox)
 
         self.setGeometry(300, 100, 200, 200)
-        th = Thread(cam_num=self.cam_id, parent=self)
+        th = VideoWorker(cam_num=self.cam_id, parent=self)
         th.changePixmap.connect(self.setImage)
         th.changeText.connect(self.setText)
+        th.startExcercise.connect(self.handExcersice)
+        th.exCounter.connect(self.completeChange)
         th.start()
-
+        self.show()
 
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
@@ -240,14 +176,16 @@ class MainWindow(QMainWindow):
 
     def camera_launch(self):
         # w = App(thread_parent=self)
-        cameras = self.return_camera_indexes(4)
+        # cameras = self.return_camera_indexes(4)
         # if self.w is None:
         # for el in cameras:
-        self.w = App(cameras[0])
+        # print(cameras)
+        self.w = App(0)
         self.w.show()
 
-        self.c = App(cameras[1])
-        self.c.show()
+        # if len(cameras) == 2:
+        #     self.c = App(cameras[1])
+        #     self.c.show()
 
         # lst = []
         # lst.append(App())
