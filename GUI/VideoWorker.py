@@ -124,7 +124,7 @@ class VideoWorker(QThread):
         while True:
             ret, frame = cap.read()
             if ret:
-                # clearQtImage = self.video_preparing(frame))
+                clearQtImage = self.video_preparing(frame)
                 landmarks = self.get_new_frame_from_neuron(frame)
                 markedQtImage = self.video_preparing(frame)
                 # markedQtImage = get_new_frame_from_neuron(frame)
@@ -139,7 +139,6 @@ class VideoWorker(QThread):
                 markedQtImage = convertToQtFormat.scaled(640, 480, Qt.KeepAspectRatio)
                 # self.changePixmap.emit(p)
                 # clearQtImage = markedQtImage
-                clearQtImage = markedQtImage
                 imageTuple = (clearQtImage, markedQtImage)
                 self.changePixmap.emit(imageTuple)
 
