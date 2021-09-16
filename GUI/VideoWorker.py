@@ -9,10 +9,13 @@ import signal
 import os
 import time
 
+from typing import Tuple, List
 
-class VideoWorker(QThread):
-    changePixmap = pyqtSignal(tuple)
+
+class VideoThreadWork(QThread):
+    changePixmap = pyqtSignal(QImage, int)
     changeText = pyqtSignal(list)
+    changeTextModern = pyqtSignal(tuple, int)
     getDict = pyqtSignal(dict)
     exCounter = pyqtSignal(int)
     startExcercise = pyqtSignal(str, str)
@@ -52,19 +55,31 @@ class VideoWorker(QThread):
 
         return landmarks
 
+    def get_angle(self, landmark, joint_list : Tuple[List[int], List[int], List[int], List[int]]):
+        '''
 
-    def get_angle(self, landmark, joint_list):
+        :param landmark: Counted mediapipes points
+        :param joint_list: List of neighbours points, of angle what we need to count
+        Middle point - top of the counted angle. Example ([1,2,3], [2,3,4]). In this case we count angle in 2, and 3.
+        :return: list of counted angles with errors. Output is [(angle, errorInThisPoint), (error2, errorInThisPoint2),..., ]
+        '''
         angle_list = []
         for joint in joint_list:
             a = np.array([landmark[joint[0]].x, landmark[joint[0]].y])  # First coordinate
             b = np.array([landmark[joint[1]].x, landmark[joint[1]].y])  # Second coordinate
             c = np.array([landmark[joint[2]].x, landmark[joint[2]].y])  # Third coordinate
 
+            aError = landmark[joint[0]].visibility
+            bError = landmark[joint[1]].visibility
+            cError = landmark[joint[2]].visibility
+
+            resError = aError * bError * cError
+
             radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(a[1] - b[1], a[0] - b[0])
             angle = np.abs(radians * 180.0 / np.pi)
             angle = angle - 180 if angle > 180.0 else angle
 
-            angle_list.append(angle)
+            angle_list.append((angle, resError))
 
         return angle_list
 
@@ -85,8 +100,9 @@ class VideoWorker(QThread):
         return convertToQtFormat.scaled(width, height, Qt.KeepAspectRatio)
 
     def get_hand(self, landmarks, left, right):
-        accurancy_left =landmarks[left[0]].visibility * landmarks[left[1]].visibility * landmarks[left[2]].visibility
-        accurancy_right =landmarks[right[0]].visibility * landmarks[right[1]].visibility * landmarks[right[2]].visibility
+        accurancy_left = landmarks[left[0]].visibility * landmarks[left[1]].visibility * landmarks[left[2]].visibility
+        accurancy_right = landmarks[right[0]].visibility * landmarks[right[1]].visibility * landmarks[
+            right[2]].visibility
 
         if accurancy_left > accurancy_right:
             return 'Left'
@@ -94,9 +110,8 @@ class VideoWorker(QThread):
             return 'Right'
 
     def excersice_dumbbell(self, angList):
-        elbow = angList[0]
-        shoulder = angList[1]
-        print(elbow, shoulder)
+        elbow = angList[0][0]
+        shoulder = angList[0][1]
         if self.stage == -1 and (shoulder < 15 or shoulder > 170) and elbow > 75:
             self.stage = 0
             return 'Preparation'
@@ -109,24 +124,51 @@ class VideoWorker(QThread):
             self.stage = -1
             if self.complete:
                 self.counter += 1
-                print(self.counter)
                 self.exCounter.emit(self.counter)
             self.complete = False
             return 'Complete!'
 
         return None
 
+    def get_leng(landmark, joint):
+        a = np.array([landmark[joint[0]].x, landmark[joint[0]].y])  # First coordinate
+        b = np.array([landmark[joint[1]].x, landmark[joint[1]].y])  # Second coordinate
+
+        return int(np.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) * 100) / 100
+
+    def excersice_squats(self, angList:Tuple[List[int], List[int], List[int], List[int]],
+                         footPoint: list, backPoint: Tuple[List[int]]):
+        '''
+        In this function u need to write functional of squats.
+        Use function self.get_angle() to get needed angles
+
+        In result add footPoints(only coordinates)
+        Also add len of backPoint (use func get_leng for back)
+
+
+
+
+        :param angList: List with angles, which we need to count
+        :param footPoint: Coordinates of foot points.
+        :param backPoint: Len of back
+        :return:
+        '''
+
+        # return Tuple[Counted values: List[...], self.cam]
+        return None #dummy
+
 
     def run(self):
+        print(self.cam)
         right = ([16, 14, 12], [14, 12, 24])
         left = ([15, 13, 11], [13, 11, 23])
         cap = cv2.VideoCapture(self.cam)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        print (f'Frames per second using video.get(cv2.cv.CV_CAP_PROP_FPS): {fps} in camera {self.cam}')
         while True:
             ret, frame = cap.read()
             if ret:
-                clearQtImage = self.video_preparing(frame)
                 landmarks = self.get_new_frame_from_neuron(frame)
-                markedQtImage = self.video_preparing(frame)
                 # markedQtImage = get_new_frame_from_neuron(frame)
 
                 rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -137,10 +179,7 @@ class VideoWorker(QThread):
                     rgbImage.data, w, h, bytesPerLine, QImage.Format_RGB888
                 )
                 markedQtImage = convertToQtFormat.scaled(640, 480, Qt.KeepAspectRatio)
-                # self.changePixmap.emit(p)
-                # clearQtImage = markedQtImage
-                imageTuple = (clearQtImage, markedQtImage)
-                self.changePixmap.emit(imageTuple)
+                self.changePixmap.emit(markedQtImage   , self.cam)
 
                 if landmarks:
                     if self.get_hand(landmarks, left[0], right[0]) == 'Left':
@@ -151,13 +190,13 @@ class VideoWorker(QThread):
                         active_points = right
 
                     angList = self.get_angle(landmarks, ([16, 14, 12], [14, 12, 24], [15, 13, 11], [13, 11, 23]))
-                    activeAngleList = self.get_angle(landmarks, active_points) ###Fix it
-                    self.changeText.emit(angList)
+                    activeAngleList = self.get_angle(landmarks, active_points)  ###Fix it
+                    self.changeTextModern.emit(tuple(angList), self.cam)
+
                     old = self.res
                     self.res = self.excersice_dumbbell(activeAngleList)
                     self.res = self.res if self.res else old
                     self.startExcercise.emit(active_hand, self.res)
-
 
                 self.getDict.emit(landmarks)
 

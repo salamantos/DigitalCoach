@@ -1,6 +1,7 @@
 import time
 import json
 import cv2
+import sys
 import numpy as np
 import mediapipe as mp
 
@@ -50,8 +51,14 @@ def get_angle(landmark, joint):
     angle = np.abs(radians * 180.0 / np.pi)
     angle = angle - 180 if angle > 180.0 else angle
 
-
     return int(angle)
+
+def get_leng(landmark, joint):
+    a = np.array([landmark[joint[0]].x, landmark[joint[0]].y])  # First coordinate
+    b = np.array([landmark[joint[1]].x, landmark[joint[1]].y])  # Second coordinate
+
+
+    return int(np.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)*100) / 100
 
 def launch_video(filename):
     cap = cv2.VideoCapture(filename)
@@ -60,6 +67,10 @@ def launch_video(filename):
     start = time.time()
     for bodyPart in bodyPoints.keys():
         angle_dict[bodyPart] = {}
+
+    for bodyLen in list(lengPoint.keys()):
+        angle_dict[bodyLen] = {}
+
     while time.time() - start < 10:
         ret, frame = cap.read()
         if ret:
@@ -75,6 +86,14 @@ def launch_video(filename):
                         angle_dict[bodyPart][angel] += 1
                     else:
                         angle_dict[bodyPart][angel] = 1
+
+                for bodyLen in list(lengPoint.keys()):
+                    leng = get_leng(landmarks, lengPoint[bodyLen])
+
+                    if leng in angle_dict[bodyLen]:
+                        angle_dict[bodyLen][leng] += 1
+                    else:
+                        angle_dict[bodyLen][leng] = 1
         else:
             break
     for bodyPart in list(bodyPoints.keys()):
@@ -82,9 +101,12 @@ def launch_video(filename):
             if angle_dict[bodyPart][ang] == 1:
                 angle_dict[bodyPart].pop(ang)
 
-    out_file = open('json_out', 'w+')
+
+    out_file = open(f'{filename[0:filename.find(".")]}_out.json', 'w+')
     json.dump(angle_dict, out_file,  sort_keys=True, indent=4)
 
 
-
-launch_video('test.mp4')
+if len(sys.argv) == 2:
+    launch_video(str(sys.argv[1]))
+else:
+    print('Only one argment, video name')
