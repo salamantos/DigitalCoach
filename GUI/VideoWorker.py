@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import *
 import signal
 import os
 import time
+from GUI.KalmanFilter import KalmanFilter
 
 from typing import Tuple, List
 
@@ -46,6 +47,9 @@ class VideoThreadWork(QThread):
         self.counter = 0
         self.complete = False
         self.mpDraw = mp.solutions.drawing_utils
+        # self.KF = []
+        # for i in range(33):
+        #     self.KF.append(KalmanFilter(0.01, 0.01, 0.01, 0.01, 0.01, 0.1))
 
     def get_new_frame_from_neuron(self, img):
         """
@@ -67,6 +71,12 @@ class VideoThreadWork(QThread):
                 landmarks[mark_id] = lm
                 cx, cy = int(lm.x * w), int(lm.y * h)
                 cv2.circle(img, (cx, cy), 5, (255, 0, 0), cv2.FILLED)
+            # for i in range(33):
+            #     self.KF[i].predict()
+            #     (x1, y1) = self.KF[i].update(np.matrix([[landmarks[0].x], [landmarks[0].y]]))
+            #     landmarks[i].x = x1[0][0]
+            #     landmarks[i].y = y1[0][0]
+            # print(landmarks)
 
         return landmarks
 
