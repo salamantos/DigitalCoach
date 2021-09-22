@@ -11,10 +11,11 @@ pose = mpPose.Pose()
 mpDraw = mp.solutions.drawing_utils
 
 
-bodyPoints = {'left_inner_foot': (30, 28, 26), 'left_out_foot': (32,28, 26), 'left_knee': (28,26,24),
-              'left_elbow': (16,14,12), 'left_shoulder': (14, 12, 24), 'right_inner_foot': (29,27,25),
-              'right_out_foot': (31,27,25), 'right_knee': (27,25,23), 'right_elbow': (15,13,11),
-              'right_shoulder': (13,11,23)}
+bodyPoints = {'right_inner_foot': (30, 28, 26), 'right_out_foot': (32,28, 26), 'right_knee': (28,26,24),
+              'right_elbow': (16,14,12), 'right_shoulder': (14, 12, 24), 'right_hip':(12,24,26),
+              'left_inner_foot': (29,27,25),
+              'left_out_foot': (31,27,25), 'left_knee': (27,25,23), 'left_elbow': (15,13,11),
+              'left_shoulder': (13,11,23), 'left_hip': (11, 23, 25)}
 
 lengPoint = {'left_body': (12, 24), 'right_body': (11, 23)}
 

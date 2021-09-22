@@ -11,14 +11,29 @@ import time
 
 from typing import Tuple, List
 
+right_elbow = [16, 14, 12]
+right_shoulder = [14, 12, 24]
+left_elbow = [15, 14, 11]
+left_shoulder = [13, 11, 23]
+right_knee = [24, 26, 28]
+right_hip = [12, 24, 26]
+left_knee = [23, 25, 27]
+left_hip = [11, 23, 25]
+left_heel = [29, 31]
+right_heel = [30, 32]
+right_back = [12, 24]
+left_back = [11, 23]
+
 
 class VideoThreadWork(QThread):
     changePixmap = pyqtSignal(QImage, int)
     changeText = pyqtSignal(list)
-    changeTextModern = pyqtSignal(tuple, int)
+    changeTextModern = pyqtSignal(tuple, int, name='text')
     getDict = pyqtSignal(dict)
     exCounter = pyqtSignal(int)
     startExcercise = pyqtSignal(str, str)
+    startExcerciseSquats = pyqtSignal(tuple, int, name='squats')
+
 
     def __init__(self, cam_num, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -55,7 +70,7 @@ class VideoThreadWork(QThread):
 
         return landmarks
 
-    def get_angle(self, landmark, joint_list : Tuple[List[int], List[int], List[int], List[int]]):
+    def get_angle(self, landmark, joint_list):
         '''
 
         :param landmark: Counted mediapipes points
@@ -130,14 +145,22 @@ class VideoThreadWork(QThread):
 
         return None
 
-    def get_leng(landmark, joint):
-        a = np.array([landmark[joint[0]].x, landmark[joint[0]].y])  # First coordinate
-        b = np.array([landmark[joint[1]].x, landmark[joint[1]].y])  # Second coordinate
+    def get_leng(self, landmark, joint_list):
+        len_list = []
+        for joint in joint_list:
+            a = np.array([landmark[joint[0]].x, landmark[joint[0]].y])  # First coordinate
+            b = np.array([landmark[joint[1]].x, landmark[joint[1]].y])  # Second coordinate
 
-        return int(np.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) * 100) / 100
+            aError = landmark[joint[0]].visibility
+            bError = landmark[joint[1]].visibility
 
-    def excersice_squats(self, angList:Tuple[List[int], List[int], List[int], List[int]],
-                         footPoint: list, backPoint: Tuple[List[int]]):
+            resError = aError * bError
+            len_list.append((int(np.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) * 100) / 100, resError))
+
+        return len_list
+
+    def excersice_squats(self, landmark, angList, footPoint: Tuple[List[int], List[int]],
+                         backPoint: Tuple[List[int], List[int]]):
         '''
         In this function u need to write functional of squats.
         Use function self.get_angle() to get needed angles
@@ -146,20 +169,29 @@ class VideoThreadWork(QThread):
         Also add len of backPoint (use func get_leng for back)
 
 
-
-
         :param angList: List with angles, which we need to count
         :param footPoint: Coordinates of foot points.
         :param backPoint: Len of back
         :return:
         '''
 
+        angles = self.get_angle(landmark, angList)
+        back = self.get_leng(landmark, backPoint)
+
+        foot_list = []
+        for foot in footPoint:
+            a = np.array([landmark[foot].x, landmark[foot].y])  # First coordinate
+
+            aError = landmark[foot].visibility
+
+            foot_list.append((a, aError))
+
+        return (angles, foot_list,  back)
+
         # return Tuple[Counted values: List[...], self.cam]
-        return None #dummy
 
 
     def run(self):
-        print(self.cam)
         right = ([16, 14, 12], [14, 12, 24])
         left = ([15, 13, 11], [13, 11, 23])
         cap = cv2.VideoCapture(self.cam)
@@ -179,7 +211,7 @@ class VideoThreadWork(QThread):
                     rgbImage.data, w, h, bytesPerLine, QImage.Format_RGB888
                 )
                 markedQtImage = convertToQtFormat.scaled(640, 480, Qt.KeepAspectRatio)
-                self.changePixmap.emit(markedQtImage   , self.cam)
+                self.changePixmap.emit(markedQtImage, self.cam)
 
                 if landmarks:
                     if self.get_hand(landmarks, left[0], right[0]) == 'Left':
@@ -191,6 +223,10 @@ class VideoThreadWork(QThread):
 
                     angList = self.get_angle(landmarks, ([16, 14, 12], [14, 12, 24], [15, 13, 11], [13, 11, 23]))
                     activeAngleList = self.get_angle(landmarks, active_points)  ###Fix it
+                    result = self.excersice_squats(landmarks, angList=(right_elbow, right_shoulder, right_hip, right_knee,
+                                           left_elbow, left_shoulder, left_hip, left_knee),
+                                          footPoint=(right_heel + left_heel), backPoint= (right_back, left_back))
+                    self.startExcerciseSquats.emit(result, self.cam)
                     self.changeTextModern.emit(tuple(angList), self.cam)
 
                     old = self.res
