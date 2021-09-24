@@ -204,11 +204,14 @@ class VideoThreadWork(QThread):
     def run(self):
         right = ([16, 14, 12], [14, 12, 24])
         left = ([15, 13, 11], [13, 11, 23])
+        # cap = cv2.VideoCapture('rtsp://192.168.1.1')
         cap = cv2.VideoCapture(self.cam)
         fps = cap.get(cv2.CAP_PROP_FPS)
         print (f'Frames per second using video.get(cv2.cv.CV_CAP_PROP_FPS): {fps} in camera {self.cam}')
         while True:
             ret, frame = cap.read()
+            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+
             if ret:
                 landmarks = self.get_new_frame_from_neuron(frame)
                 # markedQtImage = get_new_frame_from_neuron(frame)
@@ -245,4 +248,8 @@ class VideoThreadWork(QThread):
                     self.startExcercise.emit(active_hand, self.res)
 
                 self.getDict.emit(landmarks)
+
+
+
+
 
