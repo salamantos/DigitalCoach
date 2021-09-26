@@ -1,41 +1,79 @@
 import logging
 import sys
-import cv2
-from PyQt5.QtGui import QImage, QPixmap
 
-from PyQt5.QtWidgets import *
-# from PyQt5.QtWidgets import QWidget, QFrame, QVBoxLayout, QLabel, QPushButton, QApplication, QMainWindow
+import cv2
+import mediapipe as mp
 from PyQt5.QtCore import *
-# from PyQt5.QtCore import Qt, QCoreApplication, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtWidgets import *
 
 
 class Thread(QThread):
     changePixmap = pyqtSignal(QImage)
     changeText = pyqtSignal(str)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.mpPose = mp.solutions.pose
+        self.pose = self.mpPose.Pose()
+        self.mpDraw = mp.solutions.drawing_utils
+
+    def get_new_frame_from_neuron(self, img):
+        """
+        This function founds pose landmarks, draws them on img and returns them
+
+        Ids from doc: https://google.github.io/mediapipe/solutions/pose.html
+
+        :return: found landmarks
+        """
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        results = self.pose.process(img_rgb)
+        landmarks = {}
+        if results.pose_landmarks:
+            self.mpDraw.draw_landmarks(
+                img, results.pose_landmarks, self.mpPose.POSE_CONNECTIONS
+            )
+            for mark_id, lm in enumerate(results.pose_landmarks.landmark):
+                h, w, c = img.shape
+                landmarks[mark_id] = lm
+                cx, cy = int(lm.x * w), int(lm.y * h)
+                cv2.circle(img, (cx, cy), 5, (255, 0, 0), cv2.FILLED)
+
+        return landmarks
+
     def run(self):
         cap = cv2.VideoCapture(0)
+
         while True:
             ret, frame = cap.read()
+
             if ret:
-                rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #Delete after
-                ### cap.read() ----> some_func
-                ### newFrame = get_new_frame_from_neuron_goes_brrrrrrrrrrrrrrrr()
-                ### rgbImage = cv2.cvtColor(newFrame, cv2.COLOR_BGR2RGB)
+                landmarks = self.get_new_frame_from_neuron(frame)
+                rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
                 h, w, ch = rgbImage.shape
                 bytesPerLine = ch * w
-                convertToQtFormat = QImage(rgbImage.data, w, h, bytesPerLine, QImage.Format_RGB888)
+                convertToQtFormat = QImage(
+                    rgbImage.data, w, h, bytesPerLine, QImage.Format_RGB888
+                )
                 p = convertToQtFormat.scaled(640, 480, Qt.KeepAspectRatio)
                 self.changePixmap.emit(p)
-                bright = int(frame[320,240,0]) + int(frame[320, 240, 1]) + int(frame[320, 240, 2])
-                print(frame[320,240,0], frame[320,240,1], frame[320,240,2], bright)
+                bright = (
+                        int(frame[320, 240, 0]) +
+                        int(frame[320, 240, 1]) +
+                        int(frame[320, 240, 2])
+                )
+                print(frame[320, 240, 0], frame[320, 240, 1],
+                      frame[320, 240, 2], bright)
+
                 if bright > 400:
                     self.changeText.emit('Too bright')
                 elif bright < 120:
                     self.changeText.emit('Too dark')
                 else:
                     self.changeText.emit('Everything is Okay')
+
 
 class App(QWidget):
     def __init__(self, thread_parent=None):
@@ -50,7 +88,6 @@ class App(QWidget):
     def setText(self, text):
         self.picture_indicator.setText(text)
 
-
     def initUI(self):
         hbox = QHBoxLayout()
 
@@ -58,8 +95,6 @@ class App(QWidget):
         self.setWindowTitle('Camera')
         # create a label
         hbox.addWidget(self.label)
-
-
 
         vbox = QVBoxLayout()
         frame = QFrame(self)
@@ -76,14 +111,12 @@ class App(QWidget):
         hbox.addWidget(frame)
         self.setLayout(hbox)
 
-
-
-
         self.setGeometry(300, 100, 200, 200)
         th = Thread(parent=self)
         th.changePixmap.connect(self.setImage)
         th.changeText.connect(self.setText)
         th.start()
+
 
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
@@ -96,7 +129,7 @@ class MainWindow(QMainWindow):
         Данная функция отвечает за создание главного меню
         :return: None
         '''
-        main_wigh=QFrame(self)
+        main_wigh = QFrame(self)
 
         hbox = QHBoxLayout()
         pict_widget = QPixmap('pictures/eye.png')
@@ -126,8 +159,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('Main Window')
         self.show()
 
-
-
     def camera_launch(self):
         # w = App(thread_parent=self)
         if self.w is None:
@@ -135,7 +166,6 @@ class MainWindow(QMainWindow):
             self.w.show()
 
         # vbox.addWidget(self.picture_in_box(self.resource_path("pictures/logo_mini.jpg"), 150))
-
 
 
 def start():
@@ -149,5 +179,3 @@ def start():
         sys.exit(app.exec_())
     except Exception as e:
         logging.exception(e)
-
-

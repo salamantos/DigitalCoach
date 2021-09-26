@@ -1,13 +1,7 @@
-import logging
-import sys
 import cv2
-from IPython.external.qt_for_kernel import QtGui
-from PyQt5.QtGui import QImage, QPixmap
-
-from PyQt5.QtWidgets import *
-# from PyQt5.QtWidgets import QWidget, QFrame, QVBoxLayout, QLabel, QPushButton, QApplication, QMainWindow
 from PyQt5.QtCore import *
-# from PyQt5.QtCore import Qt, QCoreApplication, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtWidgets import *
 
 
 class Thread(QThread):
@@ -22,7 +16,10 @@ class Thread(QThread):
                 rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgbImage.shape
                 bytesPerLine = ch * w
-                convertToQtFormat = QImage(rgbImage.data, w, h, bytesPerLine, QImage.Format_RGB888)
+                convertToQtFormat = QImage(
+                    rgbImage.data, w, h, bytesPerLine,
+                    QImage.Format_RGB888
+                )
                 p = convertToQtFormat.scaled(640, 480, Qt.KeepAspectRatio)
                 self.changePixmap.emit(p)
 
@@ -53,4 +50,3 @@ class App(QWidget):
         th.changePixmap.connect(self.setImage)
         th.start()
         self.show()
-
